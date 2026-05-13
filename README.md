@@ -1,6 +1,6 @@
 # Task Manager (full stack)
 
-Full-stack task management app: **React (Vite)** frontend, **Node.js / Express** REST API, **MongoDB** (Mongoose), **JWT** authentication, and task **CRUD** with immediate UI updates via React state and hooks.
+Full-stack task management app: **React (Vite)** frontend, **Node.js / Express** REST API, **MongoDB** (Mongoose), **JWT** authentication, and task **CRUD** with **priority**, **status workflow**, **due dates**, list **filters/sort**, and UI updates via React hooks.
 
 | | |
 | --- | --- |
@@ -53,9 +53,9 @@ Open `http://localhost:5173` — register, sign in, create tasks.
 | POST | `/api/auth/register` | No | Create user, returns JWT |
 | POST | `/api/auth/login` | No | Login, returns JWT |
 | GET | `/api/auth/me` | Bearer JWT | Current user |
-| GET | `/api/tasks` | Bearer JWT | List current user’s tasks |
-| POST | `/api/tasks` | Bearer JWT | Create task (`title`, optional `description`) |
-| PATCH | `/api/tasks/:id` | Bearer JWT | Update task |
+| GET | `/api/tasks` | Bearer JWT | List tasks. Query: `status`, `priority`, `sort` (`dueDate` or `priority`) |
+| POST | `/api/tasks` | Bearer JWT | Create: `title`, optional `description`, `priority`, `status`, `dueDate` |
+| PATCH | `/api/tasks/:id` | Bearer JWT | Update any of those fields; `completed` syncs with `status` |
 | DELETE | `/api/tasks/:id` | Bearer JWT | Delete task |
 
 ## Deploy backend on [Render](https://render.com)
