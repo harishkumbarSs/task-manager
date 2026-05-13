@@ -46,6 +46,12 @@ Vite dev server proxies `/api` to `http://localhost:5000`, so you do **not** nee
 
 Open `http://localhost:5173` — register, sign in, create tasks.
 
+## Security (API)
+
+- **Helmet** sets safer HTTP headers (with `cross-origin` resource policy so browsers can call the API from your Netlify origin).
+- **Rate limiting** applies to `/api/*` (except `GET /api/health`) and stricter limits on `/api/auth/login` and `/api/auth/register`.
+- Behind Render/Railway, **`trust proxy`** is enabled so the client IP is correct for rate limits.
+
 ## API overview
 
 | Method | Path | Auth | Description |
