@@ -32,10 +32,11 @@ async function buildAuthResponse(user) {
   const accessToken = signAccessToken(user._id.toString());
   const refreshToken = randomRefreshToken();
   await persistRefreshToken(user._id, refreshToken);
+  const role = user.role || "user";
   return {
     accessToken,
     refreshToken,
-    user: { id: user._id, email: user.email },
+    user: { id: user._id, email: user.email, role },
   };
 }
 
@@ -55,7 +56,9 @@ export async function register(req, res) {
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await User.create({ email: email.toLowerCase(), passwordHash });
+    const isFirstUser = (await User.countDocuments()) === 0;
+    const role = isFirstUser ? "admin" : "user";
+    const user = await User.create({ email: email.toLowerCase(), passwordHash, role });
     const payload = await buildAuthResponse(user);
     return res.status(201).json(payload);
   } catch (err) {
@@ -106,7 +109,7 @@ export async function refresh(req, res) {
       return res.status(401).json({ message: "Invalid or expired refresh token" });
     }
 
-    const user = await User.findById(doc.user).select("_id email");
+    const user = await User.findById(doc.user).select("_id email role");
     if (!user) {
       await RefreshToken.deleteOne({ _id: doc._id });
       return res.status(401).json({ message: "User not found" });
@@ -141,5 +144,6 @@ export async function logout(req, res) {
 }
 
 export function me(req, res) {
-  return res.json({ user: { id: req.user._id, email: req.user.email } });
+  const role = req.user.role || "user";
+  return res.json({ user: { id: req.user._id, email: req.user.email, role } });
 }

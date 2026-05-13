@@ -51,6 +51,8 @@ Open `http://localhost:5173` — register, sign in, create tasks.
 - **Helmet** sets safer HTTP headers (with `cross-origin` resource policy so browsers can call the API from your Netlify origin).
 - **Rate limiting** applies to `/api/*` (except `GET /api/health`) and stricter limits on `/api/auth/login` and `/api/auth/register`.
 - **Access + refresh tokens:** access JWT is short-lived (default **15m**, `JWT_EXPIRES_IN`); refresh token is stored hashed in MongoDB and rotated on `POST /api/auth/refresh`. The SPA keeps both in `localStorage` and retries once after **401** using refresh (production apps often prefer `httpOnly` cookies for refresh).
+- **RBAC:** users have `role` **`user`** or **`admin`**. The **first registered account** on an empty database becomes **`admin`** (demo bootstrap). `GET /api/admin/summary` (admin only) returns total user and task counts. Non-admins receive **403** on admin routes.
+
 - Behind Render/Railway, **`trust proxy`** is enabled so the client IP is correct for rate limits.
 
 ## API overview
@@ -61,7 +63,8 @@ Open `http://localhost:5173` — register, sign in, create tasks.
 | POST | `/api/auth/login` | No | Login; returns `accessToken`, `refreshToken`, `user` |
 | POST | `/api/auth/refresh` | No | Body: `{ refreshToken }`; rotates refresh token, returns new pair |
 | POST | `/api/auth/logout` | No | Body: `{ refreshToken }` (optional); revokes that refresh token |
-| GET | `/api/auth/me` | Bearer access JWT | Current user |
+| GET | `/api/auth/me` | Bearer access JWT | Current user (`id`, `email`, `role`) |
+| GET | `/api/admin/summary` | Bearer access JWT, **admin** role | JSON: `{ users, tasks }` counts |
 | GET | `/api/tasks` | Bearer JWT | List tasks. Query: `status`, `priority`, `sort` (`dueDate` or `priority`) |
 | POST | `/api/tasks` | Bearer JWT | Create: `title`, optional `description`, `priority`, `status`, `dueDate` |
 | PATCH | `/api/tasks/:id` | Bearer JWT | Update any of those fields; `completed` syncs with `status` |
