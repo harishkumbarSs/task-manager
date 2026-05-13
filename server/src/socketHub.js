@@ -41,3 +41,10 @@ export function notifyUserTasksChanged(userId) {
   if (!io || !userId) return;
   io.to(`user:${userId}`).emit("tasks:invalidate", { at: Date.now() });
 }
+
+/** After comment create/delete — clients refetch only that thread. */
+export function notifyUserCommentsChanged(userId, taskId) {
+  if (!io || !userId || !taskId) return;
+  const tid = String(taskId);
+  io.to(`user:${userId}`).emit("comments:invalidate", { taskId: tid, at: Date.now() });
+}

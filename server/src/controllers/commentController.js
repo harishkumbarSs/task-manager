@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { Comment } from "../models/Comment.js";
 import { Task } from "../models/Task.js";
-import { notifyUserTasksChanged } from "../socketHub.js";
+import { notifyUserCommentsChanged } from "../socketHub.js";
 
 async function assertTaskOwned(taskId, userId) {
   if (!mongoose.isValidObjectId(taskId)) return null;
@@ -48,7 +48,7 @@ export async function createComment(req, res) {
     body: text,
   });
   await doc.populate("user", "email");
-  notifyUserTasksChanged(req.user._id.toString());
+  notifyUserCommentsChanged(req.user._id.toString(), taskId);
   return res.status(201).json({
     id: doc._id,
     body: doc.body,
@@ -77,6 +77,6 @@ export async function deleteComment(req, res) {
     return res.status(403).json({ message: "You can only delete your own comments" });
   }
   await Comment.deleteOne({ _id: commentId, task: taskId });
-  notifyUserTasksChanged(req.user._id.toString());
+  notifyUserCommentsChanged(req.user._id.toString(), taskId);
   return res.status(204).send();
 }

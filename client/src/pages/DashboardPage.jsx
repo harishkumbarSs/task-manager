@@ -135,17 +135,21 @@ export default function DashboardPage() {
       const openIds = Object.entries(subExpanded)
         .filter(([, v]) => v)
         .map(([k]) => k);
-      const openComments = Object.entries(commentsExpanded)
-        .filter(([, v]) => v)
-        .map(([k]) => k);
-      await Promise.all([
-        ...openIds.map((id) => loadSubtasksFor(id)),
-        ...openComments.map((id) => loadCommentsFor(id)),
-      ]);
+      await Promise.all(openIds.map((id) => loadSubtasksFor(id)));
     };
     window.addEventListener("tasks:invalidate", handler);
     return () => window.removeEventListener("tasks:invalidate", handler);
-  }, [loadTasks, loadTags, loadSubtasksFor, loadCommentsFor, subExpanded, commentsExpanded]);
+  }, [loadTasks, loadTags, loadSubtasksFor, subExpanded]);
+
+  useEffect(() => {
+    const onCommentsInvalidate = (e) => {
+      const taskId = e.detail?.taskId;
+      if (!taskId) return;
+      void loadCommentsFor(String(taskId));
+    };
+    window.addEventListener("comments:invalidate", onCommentsInvalidate);
+    return () => window.removeEventListener("comments:invalidate", onCommentsInvalidate);
+  }, [loadCommentsFor]);
 
   async function handleCreate(e) {
     e.preventDefault();

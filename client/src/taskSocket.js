@@ -24,6 +24,14 @@ export function connectTaskSocket(accessToken) {
       window.dispatchEvent(new CustomEvent("tasks:invalidate"));
     }
   });
+
+  socket.on("comments:invalidate", (payload) => {
+    if (typeof window === "undefined") return;
+    const raw = payload?.taskId;
+    const taskId = raw != null && raw !== "" ? String(raw) : "";
+    if (!taskId) return;
+    window.dispatchEvent(new CustomEvent("comments:invalidate", { detail: { taskId } }));
+  });
 }
 
 export function disconnectTaskSocket() {
