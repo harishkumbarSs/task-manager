@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../api/client.js";
 import AppNav from "../components/AppNav.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 
 const STATUSES = [
   { value: "backlog", label: "Backlog" },
@@ -52,6 +53,7 @@ function tasksUrl(filters) {
 }
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -70,6 +72,9 @@ export default function DashboardPage() {
   const [subExpanded, setSubExpanded] = useState({});
   const [subtasksByParent, setSubtasksByParent] = useState({});
   const [subtaskDraft, setSubtaskDraft] = useState({});
+  const [commentsExpanded, setCommentsExpanded] = useState({});
+  const [commentsByTask, setCommentsByTask] = useState({});
+  const [commentDraft, setCommentDraft] = useState({});
 
   const listFilters = useMemo(
     () => ({ status: filterStatus, priority: filterPriority, label: filterLabel, sort: sortBy }),
@@ -82,6 +87,16 @@ export default function DashboardPage() {
       if (Array.isArray(list)) setAllTags(list);
     } catch {
       /* ignore tag index errors */
+    }
+  }, []);
+
+  const loadCommentsFor = useCallback(async (taskId) => {
+    const tid = String(taskId);
+    try {
+      const list = await apiFetch(`/api/tasks/${tid}/comments`);
+      setCommentsByTask((m) => ({ ...m, [tid]: Array.isArray(list) ? list : [] }));
+    } catch {
+      setCommentsByTask((m) => ({ ...m, [tid]: [] }));
     }
   }, []);
 
@@ -120,11 +135,17 @@ export default function DashboardPage() {
       const openIds = Object.entries(subExpanded)
         .filter(([, v]) => v)
         .map(([k]) => k);
-      await Promise.all(openIds.map((id) => loadSubtasksFor(id)));
+      const openComments = Object.entries(commentsExpanded)
+        .filter(([, v]) => v)
+        .map(([k]) => k);
+      await Promise.all([
+        ...openIds.map((id) => loadSubtasksFor(id)),
+        ...openComments.map((id) => loadCommentsFor(id)),
+      ]);
     };
     window.addEventListener("tasks:invalidate", handler);
     return () => window.removeEventListener("tasks:invalidate", handler);
-  }, [loadTasks, loadTags, loadSubtasksFor, subExpanded]);
+  }, [loadTasks, loadTags, loadSubtasksFor, loadCommentsFor, subExpanded, commentsExpanded]);
 
   async function handleCreate(e) {
     e.preventDefault();
@@ -214,6 +235,43 @@ export default function DashboardPage() {
     }
   }
 
+  function toggleCommentsFor(task) {
+    const tid = String(task._id);
+    setCommentsExpanded((p) => {
+      const next = !p[tid];
+      if (next) void loadCommentsFor(tid);
+      return { ...p, [tid]: next };
+    });
+  }
+
+  async function submitCommentForTask(taskId) {
+    const tid = String(taskId);
+    const text = (commentDraft[tid] || "").trim();
+    if (!text) return;
+    setError("");
+    try {
+      await apiFetch(`/api/tasks/${tid}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ body: text }),
+      });
+      setCommentDraft((d) => ({ ...d, [tid]: "" }));
+      await loadCommentsFor(tid);
+    } catch (e) {
+      setError(e.message || "Could not post comment");
+    }
+  }
+
+  async function removeCommentFromTask(taskId, commentId) {
+    const tid = String(taskId);
+    setError("");
+    try {
+      await apiFetch(`/api/tasks/${tid}/comments/${commentId}`, { method: "DELETE" });
+      await loadCommentsFor(tid);
+    } catch (e) {
+      setError(e.message || "Could not delete comment");
+    }
+  }
+
   function slugClient(raw) {
     return String(raw)
       .trim()
@@ -254,6 +312,21 @@ export default function DashboardPage() {
       });
       setSubtasksByParent((m) => {
         const n = { ...m };
+        delete n[sid];
+        return n;
+      });
+      setCommentsExpanded((p) => {
+        const n = { ...p };
+        delete n[sid];
+        return n;
+      });
+      setCommentsByTask((m) => {
+        const n = { ...m };
+        delete n[sid];
+        return n;
+      });
+      setCommentDraft((d) => {
+        const n = { ...d };
         delete n[sid];
         return n;
       });
@@ -561,6 +634,65 @@ export default function DashboardPage() {
                           />
                           <button type="submit" className="btn btn-primary">
                             Add
+                          </button>
+                        </form>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="comment-section">
+                    <button
+                      type="button"
+                      className="btn btn-ghost comment-toggle"
+                      onClick={() => toggleCommentsFor(task)}
+                    >
+                      {commentsExpanded[String(task._id)] ? "Hide comments" : "Show comments"}
+                      {commentsByTask[String(task._id)] != null
+                        ? ` (${commentsByTask[String(task._id)].length})`
+                        : ""}
+                    </button>
+                    {commentsExpanded[String(task._id)] ? (
+                      <div className="comment-block">
+                        {(commentsByTask[String(task._id)] || []).map((c) => (
+                          <div key={c.id} className="comment-row">
+                            <div className="comment-meta">
+                              <strong>{c.user?.email || "User"}</strong>
+                              <span className="comment-time">
+                                {formatDateTime(c.createdAt)}
+                              </span>
+                            </div>
+                            <p className="comment-body">{c.body}</p>
+                            {(user?.role === "admin" ||
+                              String(c.user?.id) === String(user?.id)) && (
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-tiny"
+                                onClick={() => removeCommentFromTask(task._id, c.id)}
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <form
+                          className="comment-add"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            submitCommentForTask(task._id);
+                          }}
+                        >
+                          <textarea
+                            rows={2}
+                            placeholder="Write a comment…"
+                            value={commentDraft[String(task._id)] || ""}
+                            onChange={(e) =>
+                              setCommentDraft((d) => ({
+                                ...d,
+                                [String(task._id)]: e.target.value,
+                              }))
+                            }
+                          />
+                          <button type="submit" className="btn btn-primary">
+                            Post
                           </button>
                         </form>
                       </div>

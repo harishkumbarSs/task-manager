@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { Comment } from "../models/Comment.js";
 import { PRIORITIES, STATUSES, Task } from "../models/Task.js";
 import { notifyUserTasksChanged } from "../socketHub.js";
 
@@ -114,7 +115,7 @@ export async function listTags(req, res) {
 }
 
 export async function listSubtasks(req, res) {
-  const { parentId } = req.params;
+  const { id: parentId } = req.params;
   if (!mongoose.isValidObjectId(parentId)) {
     return res.status(400).json({ message: "Invalid parent task id" });
   }
@@ -262,6 +263,9 @@ export async function deleteTask(req, res) {
   if (!task) {
     return res.status(404).json({ message: "Task not found" });
   }
+  const children = await Task.find({ owner: req.user._id, parentTask: id }).select("_id").lean();
+  const taskIds = [id, ...children.map((c) => c._id)];
+  await Comment.deleteMany({ task: { $in: taskIds } });
   await Task.deleteMany({ owner: req.user._id, parentTask: id });
   await Task.deleteOne({ _id: id, owner: req.user._id });
   notifyUserTasksChanged(req.user._id.toString());

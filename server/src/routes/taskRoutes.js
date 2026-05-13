@@ -7,6 +7,7 @@ import {
   listTasks,
   updateTask,
 } from "../controllers/taskController.js";
+import { createComment, deleteComment, listComments } from "../controllers/commentController.js";
 import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
@@ -14,7 +15,10 @@ const router = Router();
 router.use(requireAuth);
 
 router.get("/tags", listTags);
-router.get("/:parentId/subtasks", listSubtasks);
+router.get("/:id/subtasks", listSubtasks);
+router.get("/:id/comments", listComments);
+router.post("/:id/comments", createComment);
+router.delete("/:id/comments/:commentId", deleteComment);
 router.get("/", listTasks);
 router.post("/", createTask);
 router.patch("/:id", updateTask);
