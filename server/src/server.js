@@ -1,4 +1,5 @@
 import "dotenv/config";
+import http from "http";
 import cors from "cors";
 import express from "express";
 import rateLimit from "express-rate-limit";
@@ -7,6 +8,7 @@ import { connectDatabase } from "./config/database.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import taskRoutes from "./routes/taskRoutes.js";
+import { attachSocket } from "./socketHub.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 5000;
@@ -20,9 +22,11 @@ app.use(
 );
 
 const clientOrigin = process.env.CLIENT_ORIGIN || "http://localhost:5173";
+const allowedOrigins = clientOrigin.split(",").map((s) => s.trim());
+
 app.use(
   cors({
-    origin: clientOrigin.split(",").map((s) => s.trim()),
+    origin: allowedOrigins,
     credentials: true,
   })
 );
@@ -63,6 +67,10 @@ if (!process.env.JWT_SECRET) {
 }
 
 await connectDatabase(mongoUri);
-app.listen(port, () => {
-  console.log(`API listening on port ${port}`);
+
+const httpServer = http.createServer(app);
+attachSocket(httpServer, allowedOrigins);
+
+httpServer.listen(port, () => {
+  console.log(`API + Socket.IO listening on port ${port}`);
 });

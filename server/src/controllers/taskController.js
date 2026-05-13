@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { PRIORITIES, STATUSES, Task } from "../models/Task.js";
+import { notifyUserTasksChanged } from "../socketHub.js";
 
 const MAX_LABELS = 15;
 const MAX_LABEL_LEN = 32;
@@ -200,6 +201,7 @@ export async function createTask(req, res) {
     parentTask: parentRef,
     owner: req.user._id,
   });
+  notifyUserTasksChanged(req.user._id.toString());
   return res.status(201).json(normalizeTask(task));
 }
 
@@ -247,6 +249,7 @@ export async function updateTask(req, res) {
   } catch (e) {
     return res.status(400).json({ message: "Could not update task" });
   }
+  notifyUserTasksChanged(req.user._id.toString());
   return res.json(normalizeTask(task));
 }
 
@@ -261,5 +264,6 @@ export async function deleteTask(req, res) {
   }
   await Task.deleteMany({ owner: req.user._id, parentTask: id });
   await Task.deleteOne({ _id: id, owner: req.user._id });
+  notifyUserTasksChanged(req.user._id.toString());
   return res.status(204).send();
 }

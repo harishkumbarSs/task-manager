@@ -52,6 +52,7 @@ Open `http://localhost:5173` — register, sign in, create tasks.
 - **Rate limiting** applies to `/api/*` (except `GET /api/health`) and stricter limits on `/api/auth/login` and `/api/auth/register`.
 - **Access + refresh tokens:** access JWT is short-lived (default **15m**, `JWT_EXPIRES_IN`); refresh token is stored hashed in MongoDB and rotated on `POST /api/auth/refresh`. The SPA keeps both in `localStorage` and retries once after **401** using refresh (production apps often prefer `httpOnly` cookies for refresh).
 - **RBAC:** users have `role` **`user`** or **`admin`**. The **first registered account** on an empty database becomes **`admin`** (demo bootstrap). `GET /api/admin/summary` (admin only) returns total user and task counts. Non-admins receive **403** on admin routes.
+- **Realtime (Socket.IO):** authenticated WebSocket connections join a per-user room. After task **create / update / delete**, the server emits **`tasks:invalidate`** so open dashboards can refetch tasks (and expanded subtasks) without manual refresh.
 
 - Behind Render/Railway, **`trust proxy`** is enabled so the client IP is correct for rate limits.
 

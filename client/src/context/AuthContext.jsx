@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { apiFetch, apiUrl } from "../api/client.js";
+import { connectTaskSocket, disconnectTaskSocket } from "../taskSocket.js";
 
 const AuthContext = createContext(null);
 
@@ -98,6 +99,12 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     bootstrap();
   }, [bootstrap]);
+
+  useEffect(() => {
+    if (token) connectTaskSocket(token);
+    else disconnectTaskSocket();
+    return () => disconnectTaskSocket();
+  }, [token]);
 
   const value = useMemo(
     () => ({

@@ -113,6 +113,19 @@ export default function DashboardPage() {
     loadTasks();
   }, [loadTasks]);
 
+  useEffect(() => {
+    const handler = async () => {
+      await loadTasks();
+      await loadTags();
+      const openIds = Object.entries(subExpanded)
+        .filter(([, v]) => v)
+        .map(([k]) => k);
+      await Promise.all(openIds.map((id) => loadSubtasksFor(id)));
+    };
+    window.addEventListener("tasks:invalidate", handler);
+    return () => window.removeEventListener("tasks:invalidate", handler);
+  }, [loadTasks, loadTags, loadSubtasksFor, subExpanded]);
+
   async function handleCreate(e) {
     e.preventDefault();
     if (!title.trim()) return;
