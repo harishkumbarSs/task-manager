@@ -332,7 +332,32 @@ h1.page-title {
   color: var(--muted);
   margin-top: 0.25rem;
 }
-.due-pill.overdue {
-  color: #fca5a5;
-  font-weight: 600;
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0.5rem;
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.tag-remove {
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 0;
+  line-height: 1;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.tag-remove:hover {
+  color: var(--danger);
 }

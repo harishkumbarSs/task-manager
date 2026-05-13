@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createTask,
   deleteTask,
+  listTags,
   listTasks,
   updateTask,
 } from "../controllers/taskController.js";
@@ -11,6 +12,7 @@ const router = Router();
 
 router.use(requireAuth);
 
+router.get("/tags", listTags);
 router.get("/", listTasks);
 router.post("/", createTask);
 router.patch("/:id", updateTask);

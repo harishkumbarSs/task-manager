@@ -1,10 +1,44 @@
 import { PRIORITIES, STATUSES, Task } from "../models/Task.js";
 
+const MAX_LABELS = 15;
+const MAX_LABEL_LEN = 32;
+
+function slugLabel(s) {
+  return String(s)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .slice(0, MAX_LABEL_LEN);
+}
+
+function normalizeLabels(value) {
+  if (value === undefined) return undefined;
+  if (value === null) return [];
+  const parts = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(/[,;\n]+/)
+      : [];
+  const out = [];
+  const seen = new Set();
+  for (const p of parts) {
+    const slug = slugLabel(p);
+    if (!slug) continue;
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    out.push(slug);
+    if (out.length >= MAX_LABELS) break;
+  }
+  return out;
+}
+
 function normalizeTask(t) {
   const o = t.toObject ? t.toObject() : { ...t };
   const status = o.status || (o.completed ? "done" : "backlog");
   const priority = o.priority || "medium";
-  return { ...o, status, priority, completed: status === "done" };
+  const labels = Array.isArray(o.labels) ? o.labels : [];
+  return { ...o, status, priority, completed: status === "done", labels };
 }
 
 function parseDueDate(value) {
@@ -20,23 +54,59 @@ function isValidEnum(value, allowed) {
 
 const PRIORITY_ORDER = { low: 0, medium: 1, high: 2, urgent: 3 };
 
-export async function listTasks(req, res) {
-  const { status, priority, sort } = req.query;
-  const filter = { owner: req.user._id };
-  if (priority && isValidEnum(priority, PRIORITIES)) filter.priority = priority;
+function buildListFilter(req) {
+  const and = [{ owner: req.user._id }];
+
+  const { status, priority, label } = req.query;
+
+  if (priority && isValidEnum(priority, PRIORITIES)) {
+    and.push({ priority });
+  }
+
+  const labelSlug = typeof label === "string" ? slugLabel(label) : "";
+  if (labelSlug) {
+    and.push({ labels: labelSlug });
+  }
 
   if (status && isValidEnum(status, STATUSES)) {
     if (status === "backlog") {
-      filter.$or = [
-        { status: "backlog" },
-        { status: { $exists: false }, completed: { $ne: true } },
-      ];
+      and.push({
+        $or: [
+          { status: "backlog" },
+          { status: { $exists: false }, completed: { $ne: true } },
+        ],
+      });
     } else if (status === "done") {
-      filter.$or = [{ status: "done" }, { completed: true }];
+      and.push({
+        $or: [{ status: "done" }, { completed: true }],
+      });
     } else {
-      filter.status = status;
+      and.push({ status });
     }
   }
+
+  if (and.length === 1) return and[0];
+  return { $and: and };
+}
+
+export async function listTags(req, res) {
+  const rows = await Task.aggregate([
+    {
+      $match: {
+        owner: req.user._id,
+        labels: { $exists: true, $type: "array", $ne: [] },
+      },
+    },
+    { $unwind: "$labels" },
+    { $group: { _id: "$labels" } },
+    { $sort: { _id: 1 } },
+  ]);
+  return res.json(rows.map((r) => r._id));
+}
+
+export async function listTasks(req, res) {
+  const { sort } = req.query;
+  const filter = buildListFilter(req);
 
   if (sort === "priority") {
     const raw = await Task.find(filter).lean();
@@ -55,7 +125,7 @@ export async function listTasks(req, res) {
 }
 
 export async function createTask(req, res) {
-  const { title, description, completed, priority, status, dueDate } = req.body;
+  const { title, description, completed, priority, status, dueDate, labels } = req.body;
   if (!title || typeof title !== "string") {
     return res.status(400).json({ message: "Title is required" });
   }
@@ -74,6 +144,8 @@ export async function createTask(req, res) {
   if (completed === true) nextStatus = "done";
   if (completed === false && nextStatus === "done") nextStatus = "backlog";
 
+  const labelList = labels !== undefined ? normalizeLabels(labels) : [];
+
   const task = await Task.create({
     title: title.trim(),
     description: typeof description === "string" ? description : "",
@@ -81,6 +153,7 @@ export async function createTask(req, res) {
     priority: isValidEnum(priority, PRIORITIES) ? priority : "medium",
     status: nextStatus,
     dueDate: due === undefined ? null : due,
+    labels: labelList,
     owner: req.user._id,
   });
   return res.status(201).json(normalizeTask(task));
@@ -93,7 +166,7 @@ export async function updateTask(req, res) {
     return res.status(404).json({ message: "Task not found" });
   }
 
-  const { title, description, completed, priority, status, dueDate } = req.body;
+  const { title, description, completed, priority, status, dueDate, labels } = req.body;
   if (title !== undefined) task.title = String(title).trim();
   if (description !== undefined) task.description = String(description);
   if (priority !== undefined) {
@@ -108,6 +181,9 @@ export async function updateTask(req, res) {
       return res.status(400).json({ message: "Invalid due date" });
     }
     task.dueDate = due === undefined ? null : due;
+  }
+  if (labels !== undefined) {
+    task.labels = normalizeLabels(labels);
   }
 
   if (status !== undefined) {

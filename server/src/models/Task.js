@@ -19,6 +19,10 @@ const taskSchema = new mongoose.Schema(
       default: "backlog",
     },
     dueDate: { type: Date, default: null },
+    labels: {
+      type: [String],
+      default: [],
+    },
     owner: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -31,5 +35,6 @@ const taskSchema = new mongoose.Schema(
 
 taskSchema.index({ owner: 1, status: 1 });
 taskSchema.index({ owner: 1, dueDate: 1 });
+taskSchema.index({ owner: 1, labels: 1 });
 
 export const Task = mongoose.model("Task", taskSchema);

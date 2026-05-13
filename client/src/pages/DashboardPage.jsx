@@ -45,6 +45,7 @@ function tasksUrl(filters) {
   const p = new URLSearchParams();
   if (filters.status) p.set("status", filters.status);
   if (filters.priority) p.set("priority", filters.priority);
+  if (filters.label) p.set("label", filters.label);
   if (filters.sort) p.set("sort", filters.sort);
   const q = p.toString();
   return `/api/tasks${q ? `?${q}` : ""}`;
@@ -61,12 +62,25 @@ export default function DashboardPage() {
   const [newDue, setNewDue] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
+  const [filterLabel, setFilterLabel] = useState("");
   const [sortBy, setSortBy] = useState("");
+  const [allTags, setAllTags] = useState([]);
+  const [newLabels, setNewLabels] = useState("");
+  const [tagInputs, setTagInputs] = useState({});
 
   const listFilters = useMemo(
-    () => ({ status: filterStatus, priority: filterPriority, sort: sortBy }),
-    [filterStatus, filterPriority, sortBy]
+    () => ({ status: filterStatus, priority: filterPriority, label: filterLabel, sort: sortBy }),
+    [filterStatus, filterPriority, filterLabel, sortBy]
   );
+
+  const loadTags = useCallback(async () => {
+    try {
+      const list = await apiFetch("/api/tasks/tags");
+      if (Array.isArray(list)) setAllTags(list);
+    } catch {
+      /* ignore tag index errors */
+    }
+  }, []);
 
   const loadTasks = useCallback(async () => {
     setError("");
@@ -78,7 +92,8 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [listFilters]);
+    loadTags();
+  }, [listFilters, loadTags]);
 
   useEffect(() => {
     setLoading(true);
@@ -97,6 +112,7 @@ export default function DashboardPage() {
         status: newStatus,
       };
       if (newDue) body.dueDate = newDue;
+      if (newLabels.trim()) body.labels = newLabels;
       await apiFetch("/api/tasks", {
         method: "POST",
         body: JSON.stringify(body),
@@ -106,6 +122,7 @@ export default function DashboardPage() {
       setNewPriority("medium");
       setNewStatus("backlog");
       setNewDue("");
+      setNewLabels("");
       await loadTasks();
     } catch (err) {
       setError(err.message || "Could not create task");
@@ -125,6 +142,28 @@ export default function DashboardPage() {
     }
   }
 
+  function slugClient(raw) {
+    return String(raw)
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .slice(0, 32);
+  }
+
+  function appendLabel(task, raw) {
+    const slug = slugClient(raw);
+    if (!slug) return;
+    const current = Array.isArray(task.labels) ? [...task.labels] : [];
+    if (current.includes(slug) || current.length >= 15) return;
+    patchTask(task._id, { labels: [...current, slug] });
+  }
+
+  function removeLabel(task, label) {
+    const next = (Array.isArray(task.labels) ? task.labels : []).filter((l) => l !== label);
+    patchTask(task._id, { labels: next });
+  }
+
   async function toggleComplete(task) {
     const nextDone = !task.completed;
     await patchTask(task._id, { completed: nextDone });
@@ -135,6 +174,7 @@ export default function DashboardPage() {
     try {
       await apiFetch(`/api/tasks/${id}`, { method: "DELETE" });
       setTasks((prev) => prev.filter((t) => t._id !== id));
+      loadTags();
     } catch (err) {
       setError(err.message || "Delete failed");
     }
@@ -145,7 +185,7 @@ export default function DashboardPage() {
       <AppNav />
       <h1 className="page-title">Your tasks</h1>
       <p className="subtitle">
-        Priority, status workflow, and due dates — filter and sort from the toolbar.
+        Priority, status, due dates, and labels — filter by tag and sort from the toolbar.
       </p>
 
       {error ? <div className="error-banner">{error}</div> : null}
@@ -182,6 +222,21 @@ export default function DashboardPage() {
           </select>
         </div>
         <div className="field">
+          <label htmlFor="filter-label">Label</label>
+          <select
+            id="filter-label"
+            value={filterLabel}
+            onChange={(e) => setFilterLabel(e.target.value)}
+          >
+            <option value="">All</option>
+            {allTags.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
           <label htmlFor="sort-by">Sort</label>
           <select id="sort-by" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
             <option value="">Newest first</option>
@@ -211,6 +266,15 @@ export default function DashboardPage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Notes or details…"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="task-labels">Labels (optional)</label>
+            <input
+              id="task-labels"
+              value={newLabels}
+              onChange={(e) => setNewLabels(e.target.value)}
+              placeholder="e.g. frontend, sprint-1 (comma-separated)"
             />
           </div>
           <div className="toolbar" style={{ marginBottom: 0 }}>
@@ -290,6 +354,23 @@ export default function DashboardPage() {
                       {STATUSES.find((s) => s.value === task.status)?.label ?? task.status}
                     </span>
                   </div>
+                  {task.labels && task.labels.length > 0 ? (
+                    <div className="tag-list">
+                      {task.labels.map((lab) => (
+                        <span key={lab} className="tag-chip">
+                          {lab}
+                          <button
+                            type="button"
+                            className="tag-remove"
+                            aria-label={`Remove label ${lab}`}
+                            onClick={() => removeLabel(task, lab)}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                   <h3 className="task-title">{task.title}</h3>
                   {task.description ? <p className="task-desc">{task.description}</p> : null}
                   {task.dueDate ? (
@@ -328,6 +409,21 @@ export default function DashboardPage() {
                       onChange={(e) =>
                         patchTask(task._id, { dueDate: e.target.value || null })
                       }
+                    />
+                    <input
+                      aria-label="Add label"
+                      placeholder="Add tag, Enter"
+                      value={tagInputs[task._id] || ""}
+                      onChange={(e) =>
+                        setTagInputs((m) => ({ ...m, [task._id]: e.target.value }))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        e.preventDefault();
+                        const v = tagInputs[task._id] || "";
+                        appendLabel(task, v);
+                        setTagInputs((m) => ({ ...m, [task._id]: "" }));
+                      }}
                     />
                   </div>
                   <div className="task-meta">
