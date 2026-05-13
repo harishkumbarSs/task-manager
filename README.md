@@ -12,6 +12,8 @@ Full-stack task management app: **React (Vite)** frontend, **Node.js / Express**
 
 - `client/` — React SPA (Netlify)
 - `server/` — Express API (Render)
+- `docker-compose.yml` — local **MongoDB + API** (see [Docker](#docker-mongodb--api-only))
+- `docker-compose.env.example` — template for root `.env` when using Compose
 
 ## Local development
 
@@ -45,6 +47,28 @@ npm run dev
 Vite dev server proxies `/api` to `http://localhost:5000`, so you do **not** need `VITE_API_URL` for local work.
 
 Open `http://localhost:5173` — register, sign in, create tasks.
+
+## Docker (MongoDB + API only)
+
+Run the database and API in containers; use **Vite on your machine** for the React app (same as before: `cd client && npm run dev` → proxies to `http://localhost:5000`).
+
+1. In the **repo root**, copy the env template and set a real secret:
+
+   ```bash
+   cp docker-compose.env.example .env
+   # Edit .env — set JWT_SECRET to a long random string (32+ characters).
+   ```
+
+2. Start services:
+
+   ```bash
+   docker compose up --build
+   ```
+
+3. API: `http://localhost:5000` · Health: `GET http://localhost:5000/api/health`  
+   Data is stored in the named volume `mongo_data`. Stop with `Ctrl+C` or `docker compose down` (add `-v` to remove the DB volume).
+
+Requires [Docker Engine](https://docs.docker.com/engine/) and Docker Compose v2.
 
 ## Security (API)
 
