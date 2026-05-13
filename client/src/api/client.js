@@ -7,7 +7,64 @@ export function apiUrl(path) {
   return p;
 }
 
-export async function apiFetch(path, options = {}) {
+let refreshInFlight = null;
+
+async function trySilentRefresh() {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      const rt = localStorage.getItem("refreshToken");
+      if (!rt) return false;
+      try {
+        const res = await fetch(apiUrl("/api/auth/refresh"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken: rt }),
+        });
+        const text = await res.text();
+        let data = null;
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch {
+            return false;
+          }
+        }
+        if (!res.ok || !data?.accessToken || !data?.refreshToken) {
+          localStorage.removeItem("token");
+          localStorage.removeItem("refreshToken");
+          localStorage.removeItem("user");
+          return false;
+        }
+        localStorage.setItem("token", data.accessToken);
+        localStorage.setItem("refreshToken", data.refreshToken);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("auth:tokens", {
+              detail: { accessToken: data.accessToken, refreshToken: data.refreshToken },
+            })
+          );
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    })().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+function shouldSkipRefreshRetry(path) {
+  return (
+    path.startsWith("/api/auth/login") ||
+    path.startsWith("/api/auth/register") ||
+    path.startsWith("/api/auth/refresh") ||
+    path.startsWith("/api/auth/logout")
+  );
+}
+
+export async function apiFetch(path, options = {}, isRetry = false) {
   const headers = new Headers(options.headers);
   if (options.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -25,6 +82,19 @@ export async function apiFetch(path, options = {}) {
       data = { message: text };
     }
   }
+
+  if (
+    res.status === 401 &&
+    !isRetry &&
+    !shouldSkipRefreshRetry(path) &&
+    localStorage.getItem("refreshToken")
+  ) {
+    const refreshed = await trySilentRefresh();
+    if (refreshed) {
+      return apiFetch(path, options, true);
+    }
+  }
+
   if (!res.ok) {
     const err = new Error(data?.message || res.statusText || "Request failed");
     err.status = res.status;

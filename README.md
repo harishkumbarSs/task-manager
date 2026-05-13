@@ -1,10 +1,10 @@
 # Task Manager (full stack)
 
-Full-stack task management app: **React (Vite)** frontend, **Node.js / Express** REST API, **MongoDB** (Mongoose), **JWT** authentication, and task **CRUD** with **priority**, **status workflow**, **due dates**, list **filters/sort**, and UI updates via React hooks.
+Full-stack task management app: **React (Vite)** frontend, **Node.js / Express** REST API, **MongoDB** (Mongoose), **JWT access tokens** with **rotating refresh tokens**, and task **CRUD** with **priority**, **status workflow**, **due dates**, list **filters/sort**, and UI updates via React hooks.
 
 | | |
 | --- | --- |
-| **Stack** | React 18, React Router, Vite, Express 4, Mongoose, bcrypt, JWT |
+| **Stack** | React 18, React Router, Vite, Express 4, Mongoose, bcrypt, JWT access + refresh rotation |
 | **Live demo** | Add your Netlify URL after deploy |
 | **API** | Add your Render URL after deploy |
 
@@ -50,15 +50,18 @@ Open `http://localhost:5173` — register, sign in, create tasks.
 
 - **Helmet** sets safer HTTP headers (with `cross-origin` resource policy so browsers can call the API from your Netlify origin).
 - **Rate limiting** applies to `/api/*` (except `GET /api/health`) and stricter limits on `/api/auth/login` and `/api/auth/register`.
+- **Access + refresh tokens:** access JWT is short-lived (default **15m**, `JWT_EXPIRES_IN`); refresh token is stored hashed in MongoDB and rotated on `POST /api/auth/refresh`. The SPA keeps both in `localStorage` and retries once after **401** using refresh (production apps often prefer `httpOnly` cookies for refresh).
 - Behind Render/Railway, **`trust proxy`** is enabled so the client IP is correct for rate limits.
 
 ## API overview
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| POST | `/api/auth/register` | No | Create user, returns JWT |
-| POST | `/api/auth/login` | No | Login, returns JWT |
-| GET | `/api/auth/me` | Bearer JWT | Current user |
+| POST | `/api/auth/register` | No | Create user; returns `accessToken`, `refreshToken`, `user` |
+| POST | `/api/auth/login` | No | Login; returns `accessToken`, `refreshToken`, `user` |
+| POST | `/api/auth/refresh` | No | Body: `{ refreshToken }`; rotates refresh token, returns new pair |
+| POST | `/api/auth/logout` | No | Body: `{ refreshToken }` (optional); revokes that refresh token |
+| GET | `/api/auth/me` | Bearer access JWT | Current user |
 | GET | `/api/tasks` | Bearer JWT | List tasks. Query: `status`, `priority`, `sort` (`dueDate` or `priority`) |
 | POST | `/api/tasks` | Bearer JWT | Create: `title`, optional `description`, `priority`, `status`, `dueDate` |
 | PATCH | `/api/tasks/:id` | Bearer JWT | Update any of those fields; `completed` syncs with `status` |

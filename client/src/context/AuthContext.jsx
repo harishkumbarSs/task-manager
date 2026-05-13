@@ -6,7 +6,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { apiFetch } from "../api/client.js";
+import { apiFetch, apiUrl } from "../api/client.js";
 
 const AuthContext = createContext(null);
 
@@ -23,11 +23,33 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem("token"));
   const [loading, setLoading] = useState(Boolean(localStorage.getItem("token")));
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    const rt = localStorage.getItem("refreshToken");
+    try {
+      if (rt) {
+        await fetch(apiUrl("/api/auth/logout"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken: rt }),
+        });
+      }
+    } catch {
+      /* ignore network errors on logout */
+    }
     localStorage.removeItem("token");
+    localStorage.removeItem("refreshToken");
     localStorage.removeItem("user");
     setToken(null);
     setUser(null);
+  }, []);
+
+  useEffect(() => {
+    function onTokens(e) {
+      const { accessToken } = e.detail || {};
+      if (accessToken) setToken(accessToken);
+    }
+    window.addEventListener("auth:tokens", onTokens);
+    return () => window.removeEventListener("auth:tokens", onTokens);
   }, []);
 
   const bootstrap = useCallback(async () => {
@@ -41,35 +63,34 @@ export function AuthProvider({ children }) {
       setUser(data.user);
       localStorage.setItem("user", JSON.stringify(data.user));
     } catch {
-      logout();
+      await logout();
     } finally {
       setLoading(false);
     }
   }, [logout]);
 
-  const login = useCallback(
-    async (email, password) => {
-      const data = await apiFetch("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-      });
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      setToken(data.token);
-      setUser(data.user);
-      return data.user;
-    },
-    []
-  );
+  const login = useCallback(async (email, password) => {
+    const data = await apiFetch("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+    localStorage.setItem("token", data.accessToken);
+    localStorage.setItem("refreshToken", data.refreshToken);
+    localStorage.setItem("user", JSON.stringify(data.user));
+    setToken(data.accessToken);
+    setUser(data.user);
+    return data.user;
+  }, []);
 
   const register = useCallback(async (email, password) => {
     const data = await apiFetch("/api/auth/register", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
-    localStorage.setItem("token", data.token);
+    localStorage.setItem("token", data.accessToken);
+    localStorage.setItem("refreshToken", data.refreshToken);
     localStorage.setItem("user", JSON.stringify(data.user));
-    setToken(data.token);
+    setToken(data.accessToken);
     setUser(data.user);
     return data.user;
   }, []);
