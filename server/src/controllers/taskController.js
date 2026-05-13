@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { PRIORITIES, STATUSES, Task } from "../models/Task.js";
 
 const MAX_LABELS = 15;
@@ -38,7 +39,8 @@ function normalizeTask(t) {
   const status = o.status || (o.completed ? "done" : "backlog");
   const priority = o.priority || "medium";
   const labels = Array.isArray(o.labels) ? o.labels : [];
-  return { ...o, status, priority, completed: status === "done", labels };
+  const parentTask = o.parentTask ? String(o.parentTask) : null;
+  return { ...o, status, priority, completed: status === "done", labels, parentTask };
 }
 
 function parseDueDate(value) {
@@ -54,8 +56,14 @@ function isValidEnum(value, allowed) {
 
 const PRIORITY_ORDER = { low: 0, medium: 1, high: 2, urgent: 3 };
 
+function rootTaskClause() {
+  return {
+    $or: [{ parentTask: null }, { parentTask: { $exists: false } }],
+  };
+}
+
 function buildListFilter(req) {
-  const and = [{ owner: req.user._id }];
+  const and = [{ owner: req.user._id }, rootTaskClause()];
 
   const { status, priority, label } = req.query;
 
@@ -104,6 +112,25 @@ export async function listTags(req, res) {
   return res.json(rows.map((r) => r._id));
 }
 
+export async function listSubtasks(req, res) {
+  const { parentId } = req.params;
+  if (!mongoose.isValidObjectId(parentId)) {
+    return res.status(400).json({ message: "Invalid parent task id" });
+  }
+  const parent = await Task.findOne({
+    _id: parentId,
+    owner: req.user._id,
+    ...rootTaskClause(),
+  }).lean();
+  if (!parent) {
+    return res.status(404).json({ message: "Parent task not found" });
+  }
+  const raw = await Task.find({ owner: req.user._id, parentTask: parentId })
+    .sort({ createdAt: 1 })
+    .lean();
+  return res.json(raw.map(normalizeTask));
+}
+
 export async function listTasks(req, res) {
   const { sort } = req.query;
   const filter = buildListFilter(req);
@@ -125,7 +152,7 @@ export async function listTasks(req, res) {
 }
 
 export async function createTask(req, res) {
-  const { title, description, completed, priority, status, dueDate, labels } = req.body;
+  const { title, description, completed, priority, status, dueDate, labels, parentTaskId } = req.body;
   if (!title || typeof title !== "string") {
     return res.status(400).json({ message: "Title is required" });
   }
@@ -146,6 +173,22 @@ export async function createTask(req, res) {
 
   const labelList = labels !== undefined ? normalizeLabels(labels) : [];
 
+  let parentRef = null;
+  if (parentTaskId !== undefined && parentTaskId !== null && parentTaskId !== "") {
+    if (!mongoose.isValidObjectId(parentTaskId)) {
+      return res.status(400).json({ message: "Invalid parent task id" });
+    }
+    const parent = await Task.findOne({
+      _id: parentTaskId,
+      owner: req.user._id,
+      ...rootTaskClause(),
+    });
+    if (!parent) {
+      return res.status(400).json({ message: "Parent task not found or is already a subtask" });
+    }
+    parentRef = parent._id;
+  }
+
   const task = await Task.create({
     title: title.trim(),
     description: typeof description === "string" ? description : "",
@@ -154,6 +197,7 @@ export async function createTask(req, res) {
     status: nextStatus,
     dueDate: due === undefined ? null : due,
     labels: labelList,
+    parentTask: parentRef,
     owner: req.user._id,
   });
   return res.status(201).json(normalizeTask(task));
@@ -208,9 +252,14 @@ export async function updateTask(req, res) {
 
 export async function deleteTask(req, res) {
   const { id } = req.params;
-  const result = await Task.deleteOne({ _id: id, owner: req.user._id });
-  if (result.deletedCount === 0) {
+  if (!mongoose.isValidObjectId(id)) {
+    return res.status(400).json({ message: "Invalid task id" });
+  }
+  const task = await Task.findOne({ _id: id, owner: req.user._id });
+  if (!task) {
     return res.status(404).json({ message: "Task not found" });
   }
+  await Task.deleteMany({ owner: req.user._id, parentTask: id });
+  await Task.deleteOne({ _id: id, owner: req.user._id });
   return res.status(204).send();
 }

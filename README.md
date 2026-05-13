@@ -1,6 +1,6 @@
 # Task Manager (full stack)
 
-Full-stack task management app: **React (Vite)** frontend, **Node.js / Express** REST API, **MongoDB** (Mongoose), **JWT access tokens** with **rotating refresh tokens**, and task **CRUD** with **priority**, **status workflow**, **due dates**, **labels/tags**, list **filters/sort**, and UI updates via React hooks.
+Full-stack task management app: **React (Vite)** frontend, **Node.js / Express** REST API, **MongoDB** (Mongoose), **JWT access tokens** with **rotating refresh tokens**, and task **CRUD** with **subtasks (one level)**, **priority**, **status workflow**, **due dates**, **labels/tags**, list **filters/sort**, and UI updates via React hooks.
 
 | | |
 | --- | --- |
@@ -65,11 +65,12 @@ Open `http://localhost:5173` — register, sign in, create tasks.
 | POST | `/api/auth/logout` | No | Body: `{ refreshToken }` (optional); revokes that refresh token |
 | GET | `/api/auth/me` | Bearer access JWT | Current user (`id`, `email`, `role`) |
 | GET | `/api/admin/summary` | Bearer access JWT, **admin** role | JSON: `{ users, tasks }` counts |
-| GET | `/api/tasks` | Bearer JWT | List tasks. Query: `status`, `priority`, `label` (exact tag), `sort` (`dueDate` or `priority`) |
+| GET | `/api/tasks` | Bearer JWT | **Root tasks only** (no `parentTask`). Query: `status`, `priority`, `label`, `sort` |
+| GET | `/api/tasks/:parentId/subtasks` | Bearer JWT | Subtasks of a root task (one level; parent must be a root task) |
 | GET | `/api/tasks/tags` | Bearer JWT | Distinct labels used by the current user’s tasks |
-| POST | `/api/tasks` | Bearer JWT | Create: `title`, optional `description`, `priority`, `status`, `dueDate`, `labels` (array or comma-separated string) |
+| POST | `/api/tasks` | Bearer JWT | Create root or subtask: optional `parentTaskId` (root id only). Other fields as before |
 | PATCH | `/api/tasks/:id` | Bearer JWT | Update fields including `labels`; `completed` syncs with `status` |
-| DELETE | `/api/tasks/:id` | Bearer JWT | Delete task |
+| DELETE | `/api/tasks/:id` | Bearer JWT | Delete task; **deletes all subtasks** if the task is a parent |
 
 ## Deploy backend on [Render](https://render.com)
 

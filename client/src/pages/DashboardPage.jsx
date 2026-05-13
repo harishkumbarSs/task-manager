@@ -67,6 +67,9 @@ export default function DashboardPage() {
   const [allTags, setAllTags] = useState([]);
   const [newLabels, setNewLabels] = useState("");
   const [tagInputs, setTagInputs] = useState({});
+  const [subExpanded, setSubExpanded] = useState({});
+  const [subtasksByParent, setSubtasksByParent] = useState({});
+  const [subtaskDraft, setSubtaskDraft] = useState({});
 
   const listFilters = useMemo(
     () => ({ status: filterStatus, priority: filterPriority, label: filterLabel, sort: sortBy }),
@@ -79,6 +82,16 @@ export default function DashboardPage() {
       if (Array.isArray(list)) setAllTags(list);
     } catch {
       /* ignore tag index errors */
+    }
+  }, []);
+
+  const loadSubtasksFor = useCallback(async (parentId) => {
+    const pid = String(parentId);
+    try {
+      const list = await apiFetch(`/api/tasks/${pid}/subtasks`);
+      setSubtasksByParent((m) => ({ ...m, [pid]: Array.isArray(list) ? list : [] }));
+    } catch {
+      setSubtasksByParent((m) => ({ ...m, [pid]: [] }));
     }
   }, []);
 
@@ -132,13 +145,59 @@ export default function DashboardPage() {
   async function patchTask(id, patch) {
     setError("");
     try {
-      await apiFetch(`/api/tasks/${id}`, {
+      const data = await apiFetch(`/api/tasks/${id}`, {
         method: "PATCH",
         body: JSON.stringify(patch),
       });
       await loadTasks();
+      if (data?.parentTask) {
+        await loadSubtasksFor(String(data.parentTask));
+      }
+      return data;
     } catch (err) {
       setError(err.message || "Update failed");
+      throw err;
+    }
+  }
+
+  function toggleSubtasksParent(task) {
+    const pid = String(task._id);
+    setSubExpanded((p) => {
+      const next = !p[pid];
+      if (next) void loadSubtasksFor(pid);
+      return { ...p, [pid]: next };
+    });
+  }
+
+  async function createSubtask(parentId, titleText) {
+    if (!titleText.trim()) return;
+    setError("");
+    try {
+      await apiFetch("/api/tasks", {
+        method: "POST",
+        body: JSON.stringify({
+          title: titleText.trim(),
+          status: "backlog",
+          priority: "medium",
+          parentTaskId: String(parentId),
+        }),
+      });
+      setSubtaskDraft((d) => ({ ...d, [String(parentId)]: "" }));
+      await loadSubtasksFor(String(parentId));
+      await loadTasks();
+    } catch (e) {
+      setError(e.message || "Could not add subtask");
+    }
+  }
+
+  async function deleteSubtask(parentId, subId) {
+    setError("");
+    try {
+      await apiFetch(`/api/tasks/${subId}`, { method: "DELETE" });
+      await loadSubtasksFor(String(parentId));
+      loadTags();
+    } catch (e) {
+      setError(e.message || "Delete failed");
     }
   }
 
@@ -174,6 +233,17 @@ export default function DashboardPage() {
     try {
       await apiFetch(`/api/tasks/${id}`, { method: "DELETE" });
       setTasks((prev) => prev.filter((t) => t._id !== id));
+      const sid = String(id);
+      setSubExpanded((p) => {
+        const n = { ...p };
+        delete n[sid];
+        return n;
+      });
+      setSubtasksByParent((m) => {
+        const n = { ...m };
+        delete n[sid];
+        return n;
+      });
       loadTags();
     } catch (err) {
       setError(err.message || "Delete failed");
@@ -185,7 +255,7 @@ export default function DashboardPage() {
       <AppNav />
       <h1 className="page-title">Your tasks</h1>
       <p className="subtitle">
-        Priority, status, due dates, and labels — filter by tag and sort from the toolbar.
+        Root tasks, subtasks (one level), labels, priority, status, and due dates — use filters to narrow the list.
       </p>
 
       {error ? <div className="error-banner">{error}</div> : null}
@@ -425,6 +495,63 @@ export default function DashboardPage() {
                         setTagInputs((m) => ({ ...m, [task._id]: "" }));
                       }}
                     />
+                  </div>
+                  <div className="subtask-section">
+                    <button
+                      type="button"
+                      className="btn btn-ghost subtask-toggle"
+                      onClick={() => toggleSubtasksParent(task)}
+                    >
+                      {subExpanded[String(task._id)] ? "Hide subtasks" : "Show subtasks"}
+                      {subtasksByParent[String(task._id)] != null
+                        ? ` (${subtasksByParent[String(task._id)].length})`
+                        : ""}
+                    </button>
+                    {subExpanded[String(task._id)] ? (
+                      <div className="subtask-block">
+                        {(subtasksByParent[String(task._id)] || []).map((st) => (
+                          <div key={st._id} className="subtask-row">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(st.completed)}
+                              onChange={() => patchTask(st._id, { completed: !st.completed })}
+                              aria-label="Subtask done"
+                            />
+                            <span className={st.completed ? "subtask-title done" : "subtask-title"}>
+                              {st.title}
+                            </span>
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-tiny"
+                              onClick={() => deleteSubtask(task._id, st._id)}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                        <form
+                          className="subtask-add"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            createSubtask(task._id, subtaskDraft[String(task._id)] || "");
+                          }}
+                        >
+                          <input
+                            placeholder="New subtask title"
+                            value={subtaskDraft[String(task._id)] || ""}
+                            onChange={(e) =>
+                              setSubtaskDraft((d) => ({
+                                ...d,
+                                [String(task._id)]: e.target.value,
+                              }))
+                            }
+                          />
+                          <button type="submit" className="btn btn-primary">
+                            Add
+                          </button>
+                        </form>
+                      </div>
+                    ) : null}
                   </div>
                   <div className="task-meta">
                     Updated {formatDateTime(task.updatedAt || task.createdAt)}

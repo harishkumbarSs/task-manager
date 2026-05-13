@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createTask,
   deleteTask,
+  listSubtasks,
   listTags,
   listTasks,
   updateTask,
@@ -13,6 +14,7 @@ const router = Router();
 router.use(requireAuth);
 
 router.get("/tags", listTags);
+router.get("/:parentId/subtasks", listSubtasks);
 router.get("/", listTasks);
 router.post("/", createTask);
 router.patch("/:id", updateTask);

@@ -23,6 +23,12 @@ const taskSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    parentTask: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Task",
+      default: null,
+      index: true,
+    },
     owner: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -36,5 +42,6 @@ const taskSchema = new mongoose.Schema(
 taskSchema.index({ owner: 1, status: 1 });
 taskSchema.index({ owner: 1, dueDate: 1 });
 taskSchema.index({ owner: 1, labels: 1 });
+taskSchema.index({ owner: 1, parentTask: 1 });
 
 export const Task = mongoose.model("Task", taskSchema);
