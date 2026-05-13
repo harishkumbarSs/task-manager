@@ -96,7 +96,25 @@ export async function apiFetch(path, options = {}, isRetry = false) {
   }
 
   if (!res.ok) {
-    const err = new Error(data?.message || res.statusText || "Request failed");
+    let msg = data?.message;
+    if (!msg && text) {
+      const t = text.trim();
+      if (t.startsWith("{")) {
+        try {
+          const j = JSON.parse(t);
+          if (j && typeof j.message === "string") msg = j.message;
+        } catch {
+          /* ignore */
+        }
+      }
+      if (!msg) {
+        msg = t.length > 200 ? `${t.slice(0, 200)}…` : t;
+      }
+    }
+    if (!msg) {
+      msg = `${res.status} ${res.statusText || "Request failed"}`;
+    }
+    const err = new Error(msg);
     err.status = res.status;
     err.data = data;
     throw err;

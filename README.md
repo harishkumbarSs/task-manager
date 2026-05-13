@@ -108,6 +108,12 @@ CORS on the API allows the origin(s) in `CLIENT_ORIGIN`. Use a comma-separated l
 
 `https://your-app.netlify.app,https://deploy-preview-123--your-app.netlify.app`
 
+### Register or login shows “500” / “Internal Server Error”
+
+- **`VITE_API_URL`** must be set on Netlify **before** the build (then trigger a redeploy). If it is missing, the browser may call the wrong host and you will not hit your Render API reliably.
+- **`CLIENT_ORIGIN`** on Render must include your **exact** Netlify origin (scheme + host, no path), e.g. `https://your-app.netlify.app`. If it is wrong, the browser blocks the response (check the browser **Network** tab and console for CORS).
+- On Render, open **Logs** while reproducing signup: look for MongoDB connection errors, missing `JWT_SECRET`, or stack traces from the API process.
+
 ## GitHub
 
 ```bash

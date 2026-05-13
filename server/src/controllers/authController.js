@@ -63,6 +63,12 @@ export async function register(req, res) {
     return res.status(201).json(payload);
   } catch (err) {
     console.error(err);
+    if (err?.code === 11000) {
+      return res.status(409).json({ message: "Email already registered" });
+    }
+    if (err?.name === "ValidationError") {
+      return res.status(400).json({ message: err.message || "Invalid account data" });
+    }
     return res.status(500).json({ message: "Registration failed" });
   }
 }
@@ -88,6 +94,9 @@ export async function login(req, res) {
     return res.json(payload);
   } catch (err) {
     console.error(err);
+    if (err?.name === "ValidationError") {
+      return res.status(400).json({ message: err.message || "Invalid request" });
+    }
     return res.status(500).json({ message: "Login failed" });
   }
 }

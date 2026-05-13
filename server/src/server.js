@@ -9,6 +9,7 @@ import adminRoutes from "./routes/adminRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import taskRoutes from "./routes/taskRoutes.js";
 import { attachSocket } from "./socketHub.js";
+import { rateLimitKeyGenerator, rateLimitValidateRelaxed } from "./util/rateLimitKey.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 5000;
@@ -37,7 +38,12 @@ const apiLimiter = rateLimit({
   max: Number(process.env.RATE_LIMIT_MAX) || 400,
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.path === "/health",
+  validate: rateLimitValidateRelaxed,
+  keyGenerator: (req) => rateLimitKeyGenerator(req),
+  skip: (req) => {
+    const path = (req.originalUrl || req.url || "").split("?")[0];
+    return path === "/api/health";
+  },
   message: { message: "Too many requests, please try again later." },
 });
 
